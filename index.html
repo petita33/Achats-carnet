@@ -26,7 +26,7 @@ label{display:block;font-size:.8rem;color:var(--mu);margin-top:8px}.f{display:gr
 const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const eur=n=>(+n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
 const MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-const TYPES=['Vide-grenier','Vide-maison','En ligne','Don','Autre'],DEST={revente:'Revente',creation:'Création',perso:'Perso'};
+const TYPES=['Vide-grenier','Vide-maison','En ligne','Don','Autre'],DEST={revente:'Revente',creation:'Création',perso:'Perso',a_definir:'À définir'};
 const pad=n=>String(n).padStart(2,'0'),ymOf=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
 let days=[],ym=ymOf(new Date()),open=null,conf=null,ready=false;
 const msg=t=>$('#msg').textContent=t||'';
@@ -65,7 +65,7 @@ function render(){
  const rv=A.filter(a=>a.dest=='revente'),rp=rv.filter(a=>+a.revente>0),sr=rp.reduce((s,a)=>s+(+a.revente||0),0);
  $('#app').innerHTML=`<div class="nav"><button data-a="prev">‹</button><h1>${MOIS[m-1]} ${y}</h1><button data-a="next">›</button></div>
  <section class="card"><b>Récapitulatif du mois</b><div class="big">${eur(tot(A))}</div><div class="mu">${L.length} journée(s) · ${A.length} article(s)</div>
- <div class="grid"><span>Pour la revente</span><b>${eur(tot(rv))}</b><span>Pour la création</span><b>${eur(tot(A,a=>a.dest=='creation'))}</b><span>Pour moi</span><b>${eur(tot(A,a=>a.dest=='perso'))}</b><span>Revente prévue</span><b>${eur(sr)}</b><span>Marge prévue</span><b>${eur(sr-tot(rp))}</b></div></section>
+ <div class="grid"><span>Pour la revente</span><b>${eur(tot(rv))}</b><span>Pour la création</span><b>${eur(tot(A,a=>a.dest=='creation'))}</b><span>Pour moi</span><b>${eur(tot(A,a=>a.dest=='perso'))}</b>${A.some(a=>a.dest=='a_definir')?`<span>À définir</span><b>${eur(tot(A,a=>a.dest=='a_definir'))}</b>`:''}<span>Revente prévue</span><b>${eur(sr)}</b><span>Marge prévue</span><b>${eur(sr-tot(rp))}</b></div></section>
  ${L.map(day).join('')||'<p class="mu">Aucune journée ce mois-ci.</p>'}<section class="card"><b>Sauvegarde</b><div class="mu">Vos achats sont gardés dans ce navigateur. Exportez un fichier de temps en temps, et importez-le si vous changez d'appareil.</div><div class="row"><button data-a="export">Exporter</button><label style="margin:0;padding:8px 14px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;color:var(--tx);font-size:1rem">Importer<input type="file" accept=".json,application/json" hidden data-a="import"></label></div></section><button class="fab" data-a="addday">+ Nouvelle journée</button>`}
 
 async function shrink(f){const b=await createImageBitmap(f),s=Math.min(1,1200/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*s;c.height=b.height*s;c.getContext('2d').drawImage(b,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.78))}
