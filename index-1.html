@@ -1,0 +1,99 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Atelier — Carnet d'achats</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#faf6ef;--cd:#fff;--tx:#2b2620;--mu:#7a7064;--ac:#b5651d;--bd:#e6dccb}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1a16;--cd:#2a2621;--tx:#f1e9dc;--mu:#a99d8c;--ac:#e0954f;--bd:#3d372f}}
+:root[data-theme="dark"]{--bg:#1d1a16;--cd:#2a2621;--tx:#f1e9dc;--mu:#a99d8c;--ac:#e0954f;--bd:#3d372f}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,sans-serif}
+#app{max-width:640px;margin:0 auto;padding:12px 12px 90px}
+.nav{display:flex;align-items:center;justify-content:space-between}.nav h1{font-size:1.25rem;margin:0;text-transform:capitalize}
+button,input,select{font:inherit;color:inherit}
+button{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:8px 14px;cursor:pointer}
+input,select{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px;min-width:0}
+.card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:12px;margin:12px 0}
+.big{font-size:1.9rem;font-weight:700;color:var(--ac)}.mu{color:var(--mu);font-size:.85rem}
+.grid{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin-top:8px}.grid b{text-align:right}
+.hd{display:flex;justify-content:space-between;gap:8px;cursor:pointer}.r{text-align:right;white-space:nowrap}
+.ph{display:flex;gap:6px;overflow-x:auto;margin-top:8px}.ph div{position:relative;flex:none}.ph img{height:84px;border-radius:8px;display:block}
+.ph button{position:absolute;top:2px;right:2px;padding:0 6px;border-radius:50%}
+label{display:block;font-size:.8rem;color:var(--mu);margin-top:8px}.f{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.art{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;border-top:1px solid var(--bd);padding-top:8px;margin-top:8px}
+.art .nm{grid-column:1/-1;display:flex;gap:6px;align-items:center}.ref{font-size:.7rem;color:var(--mu);white-space:nowrap}
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--ac);color:#fff;border:0;padding:12px 22px;border-radius:30px;font-weight:600;box-shadow:0 4px 14px #0004}
+.row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.del{color:#c0392b}#msg{color:#c0392b;font-size:.85rem}
+</style></head><body><div id="app"><p class="mu">Chargement…</p></div><div id="msg"></div>
+<script>
+const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const eur=n=>(+n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+const MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const TYPES=['Vide-grenier','Vide-maison','En ligne','Don','Autre'],DEST={revente:'Revente',creation:'Création',perso:'Perso'};
+const pad=n=>String(n).padStart(2,'0'),ymOf=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
+let days=[],ym=ymOf(new Date()),open=null,conf=null,ready=false;
+const msg=t=>$('#msg').textContent=t||'';
+const tot=(a,f=()=>true)=>a.filter(f).reduce((s,x)=>s+(+x.prix||0),0);
+const opts=(a,v)=>a.map(x=>`<option${x==v?' selected':''}>${x}</option>`).join('');
+const get=id=>days.find(d=>d.id==id);
+let DB;
+const idb=(m,v)=>new Promise((ok,ko)=>{const t=DB.transaction('jours','readwrite'),r=t.objectStore('jours')[m](v);t.oncomplete=()=>ok(r.result);t.onerror=()=>ko(t.error)});
+const save=d=>idb('put',d).catch(e=>msg('Enregistrement impossible : '+e.message));
+const toURL=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+function exportAll(){const b=new Blob([JSON.stringify({v:1,jours:days})],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='carnet-achats-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+async function doImport(f,t){try{const j=JSON.parse(await f.text());for(const d of j.jours||[]){await idb('put',d);const i=days.findIndex(x=>x.id==d.id);i<0?days.push(d):days[i]=d}render();msg('Import terminé.')}catch(e){msg('Fichier invalide.')}t.value=''}
+const keep=fn=>{const k=document.activeElement?.dataset?.k;fn();if(k)document.querySelector('[data-k="'+k+'"]')?.focus()};
+const at=(d,i,f)=>`data-d="${d.id}" data-i="${i}" data-af="${f}" data-k="${d.id}:${i}:${f}"`;
+const fd=(d,f)=>`data-d="${d.id}" data-f="${f}" data-k="${d.id}:${f}"`;
+
+function photos(d,o){return (d.photos||[]).length?`<div class="ph">${d.photos.map((p,i)=>`<div><img src="${p}" alt="">${o?`<button data-a="delphoto" data-d="${d.id}" data-i="${i}">✕</button>`:''}</div>`).join('')}</div>`:''}
+function detail(d){const a=d.articles||[],rv=a.filter(x=>x.dest=='revente');
+ return `<div class="f"><label>Date<input type="date" value="${E(d.date)}" ${fd(d,'date')}></label><label>Type<select ${fd(d,'type')}>${opts(TYPES,d.type)}</select></label></div>
+ <label>Manifestation<input value="${E(d.nom)}" placeholder="Ex. Vide-grenier de Saint-…" ${fd(d,'nom')}></label>
+ <label>Adresse<input value="${E(d.adresse)}" placeholder="Adresse de la manifestation" ${fd(d,'adresse')}></label>
+ <div class="row"><label class="btn" style="margin:0;padding:8px 14px;border:1px solid var(--bd);border-radius:10px;cursor:pointer">📷 Ajouter des photos<input type="file" accept="image/*" multiple hidden data-a="photo" data-d="${d.id}"></label></div>
+ ${a.map((x,i)=>`<div class="art"><div class="nm"><span class="ref">${E(x.ref)}</span><input placeholder="Article" value="${E(x.nom)}" ${at(d,i,'nom')}></div>
+ <input inputmode="decimal" placeholder="Prix d'achat €" value="${x.prix||''}" ${at(d,i,'prix')}>
+ <select ${at(d,i,'dest')}>${Object.entries(DEST).map(([k,v])=>`<option value="${k}"${x.dest==k?' selected':''}>${v}</option>`).join('')}</select>
+ <button class="del" data-a="delart" data-d="${d.id}" data-i="${i}">✕</button>
+ ${x.dest=='revente'?`<input inputmode="decimal" placeholder="Prix de revente €" value="${x.revente||''}" ${at(d,i,'revente')} style="grid-column:1/-1">`:''}</div>`).join('')}
+ <div class="row"><button data-a="addart" data-d="${d.id}">+ Article</button></div>
+ <div class="grid"><span>Total de la journée</span><b>${eur(tot(a))}</b><span>Revente prévue</span><b>${eur(rv.reduce((s,x)=>s+(+x.revente||0),0))}</b></div>
+ <div class="row"><button class="del" data-a="delday" data-d="${d.id}">${conf==d.id?'Confirmer la suppression':'Supprimer la journée'}</button></div>`}
+function day(d){const a=d.articles||[],o=open==d.id,w=new Date((d.date||ym+'-01')+'T12:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+ return `<section class="card"><div class="hd" data-a="tog" data-d="${d.id}"><div><b>${w} · ${E(d.nom||d.type||'Sans titre')}</b><div class="mu">${E(d.adresse)}</div></div><div class="r"><b>${eur(tot(a))}</b><div class="mu">${a.length} article(s)</div></div></div>${photos(d,o)}${o?detail(d):''}</section>`}
+function render(){
+ if(!ready)return;
+ const L=days.filter(d=>(d.date||'').startsWith(ym)).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1),A=L.flatMap(d=>d.articles||[]),[y,m]=ym.split('-');
+ const rv=A.filter(a=>a.dest=='revente'),rp=rv.filter(a=>+a.revente>0),sr=rp.reduce((s,a)=>s+(+a.revente||0),0);
+ $('#app').innerHTML=`<div class="nav"><button data-a="prev">‹</button><h1>${MOIS[m-1]} ${y}</h1><button data-a="next">›</button></div>
+ <section class="card"><b>Récapitulatif du mois</b><div class="big">${eur(tot(A))}</div><div class="mu">${L.length} journée(s) · ${A.length} article(s)</div>
+ <div class="grid"><span>Pour la revente</span><b>${eur(tot(rv))}</b><span>Pour la création</span><b>${eur(tot(A,a=>a.dest=='creation'))}</b><span>Pour moi</span><b>${eur(tot(A,a=>a.dest=='perso'))}</b><span>Revente prévue</span><b>${eur(sr)}</b><span>Marge prévue</span><b>${eur(sr-tot(rp))}</b></div></section>
+ ${L.map(day).join('')||'<p class="mu">Aucune journée ce mois-ci.</p>'}<section class="card"><b>Sauvegarde</b><div class="mu">Vos achats sont gardés dans ce navigateur. Exportez un fichier de temps en temps, et importez-le si vous changez d'appareil.</div><div class="row"><button data-a="export">Exporter</button><label style="margin:0;padding:8px 14px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;color:var(--tx);font-size:1rem">Importer<input type="file" accept=".json,application/json" hidden data-a="import"></label></div></section><button class="fab" data-a="addday">+ Nouvelle journée</button>`}
+
+async function shrink(f){const b=await createImageBitmap(f),s=Math.min(1,1200/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=b.width*s;c.height=b.height*s;c.getContext('2d').drawImage(b,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',.78))}
+
+document.addEventListener('change',async e=>{const t=e.target;if(t.dataset.a=='import')return doImport(t.files[0],t);const d=get(t.dataset.d);if(!d)return;
+ if(t.dataset.f)d[t.dataset.f]=t.value;
+ else if(t.dataset.af){const x=d.articles[+t.dataset.i],f=t.dataset.af;x[f]=(f=='prix'||f=='revente')?(parseFloat(t.value.replace(',','.'))||0):t.value}
+ else if(t.dataset.a=='photo'){
+  try{for(const f of t.files){(d.photos=d.photos||[]).push(await toURL(await shrink(f)))}}catch(err){msg('Photo non enregistrée : '+(err.message||err.code))}
+  t.value='';await save(d);return render()}
+ else return;
+ save(d);keep(render)});
+
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t)return;const a=t.dataset.a,d=get(t.dataset.d),i=+t.dataset.i;
+ if(a=='photo'||a=='import')return;
+ if(a=='export')return exportAll();
+ if(a=='prev'||a=='next'){const[y,m]=ym.split('-');ym=ymOf(new Date(y,m-1+(a=='next'?1:-1),1))}
+ else if(a=='addday'){const n=new Date(),td=ymOf(n)+'-'+pad(n.getDate()),nd={id:crypto.randomUUID(),date:td.startsWith(ym)?td:ym+'-01',type:TYPES[0],nom:'',adresse:'',photos:[],articles:[]};days.push(nd);open=nd.id;save(nd)}
+ else if(!d)return;
+ else if(a=='tog')open=open==d.id?null:d.id;
+ else if(a=='addart'){const k=Math.max(0,...(d.articles||[]).map(x=>+String(x.ref).split('-')[1]||0))+1;(d.articles=d.articles||[]).push({ref:(d.date||'').replace(/-/g,'')+'-'+pad(k),nom:'',prix:0,dest:'revente',revente:0});save(d)}
+ else if(a=='delart'){d.articles.splice(i,1);save(d)}
+ else if(a=='delphoto'){d.photos.splice(i,1);save(d)}
+ else if(a=='delday'){if(conf==d.id){idb('delete',d.id);days=days.filter(x=>x.id!=d.id);open=null;conf=null}else conf=d.id}
+ render()});
+
+const q=indexedDB.open('carnet-achats',1);
+q.onupgradeneeded=()=>q.result.createObjectStore('jours',{keyPath:'id'});
+q.onsuccess=()=>{DB=q.result;navigator.storage?.persist?.();const r=DB.transaction('jours').objectStore('jours').getAll();r.onsuccess=()=>{days=r.result;ready=true;render()}};
+q.onerror=()=>{$('#app').innerHTML='<p class="mu">Stockage du navigateur indisponible.</p>'};
+</script></body></html>
