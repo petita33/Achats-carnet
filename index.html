@@ -21,14 +21,16 @@ label{display:block;font-size:.8rem;color:var(--mu);margin-top:8px}.f{display:gr
 .art .nm{grid-column:1/-1;display:flex;gap:6px;align-items:center}.ref{font-size:.7rem;color:var(--mu);white-space:nowrap}
 .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--ac);color:#fff;border:0;padding:12px 22px;border-radius:30px;font-weight:600;box-shadow:0 4px 14px #0004}
 .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.del{color:#c0392b}#msg{color:#c0392b;font-size:.85rem}
-</style></head><body><div id="app"><p class="mu">Chargement…</p></div><div id="msg"></div>
+#bar{max-width:640px;margin:0 auto;padding:12px 12px 0;display:grid;grid-template-columns:1fr auto;gap:8px}#bar select{width:auto}
+.hit{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--bd);padding:6px 0;margin-top:6px}.hit i{font-style:normal;color:var(--mu);font-size:.8rem}
+</style></head><body><div id="bar"><input id="qin" type="search" placeholder="Rechercher : ville, mois, objet…" autocomplete="off"><select id="sc"><option value="all">Toutes les années</option></select></div><div id="app"><p class="mu">Chargement…</p></div><div id="msg"></div>
 <script>
 const $=s=>document.querySelector(s),E=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const eur=n=>(+n||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
 const MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const TYPES=['Vide-grenier','Vide-maison','En ligne','Don','Autre'],DEST={revente:'Revente',creation:'Création',perso:'Perso',a_definir:'À définir'};
 const pad=n=>String(n).padStart(2,'0'),ymOf=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
-let days=[],ym=ymOf(new Date()),open=null,conf=null,ready=false;
+let days=[],ym=ymOf(new Date()),open=null,conf=null,ready=false,qs='',sc='all';
 const msg=t=>$('#msg').textContent=t||'';
 const tot=(a,f=()=>true)=>a.filter(f).reduce((s,x)=>s+(+x.prix||0),0);
 const opts=(a,v)=>a.map(x=>`<option${x==v?' selected':''}>${x}</option>`).join('');
@@ -59,8 +61,21 @@ function detail(d){const a=d.articles||[],rv=a.filter(x=>x.dest=='revente');
  <div class="row"><button class="del" data-a="delday" data-d="${d.id}">${conf==d.id?'Confirmer la suppression':'Supprimer la journée'}</button></div>`}
 function day(d){const a=d.articles||[],o=open==d.id,w=new Date((d.date||ym+'-01')+'T12:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
  return `<section class="card"><div class="hd" data-a="tog" data-d="${d.id}"><div><b>${w} · ${E(d.nom||d.type||'Sans titre')}</b><div class="mu">${E(d.adresse)}</div></div><div class="r"><b>${eur(tot(a))}</b><div class="mu">${a.length} article(s)</div></div></div>${photos(d,o)}${o?detail(d):''}</section>`}
+const nz=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const lab=d=>new Date((d.date||ym+'-01')+'T12:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+function syncYears(){const ys=[...new Set(days.map(d=>(d.date||'').slice(0,4)).filter(Boolean))].sort().reverse(),k=ys.join(),el=$('#sc');if(el.dataset.ys===k)return;el.dataset.ys=k;el.innerHTML='<option value="all">Toutes les années</option>'+ys.map(y=>`<option>${y}</option>`).join('');el.value=ys.includes(sc)?sc:'all';sc=el.value}
+function search(){const w=nz(qs).split(/\s+/).filter(Boolean),r=[];
+ for(const d of days){if(sc!='all'&&!(d.date||'').startsWith(sc))continue;
+  const[y,m]=(d.date||'').split('-'),dh=nz([d.nom,d.adresse,d.type,MOIS[m-1],y].join(' ')),A=d.articles||[];
+  const hit=A.filter(x=>{const h=dh+' '+nz([x.nom,x.ref,DEST[x.dest]].join(' '));return w.every(t=>h.includes(t))});
+  if(hit.length||(!A.length&&w.every(t=>dh.includes(t))))r.push({d,hit})}
+ return r.sort((a,b)=>(a.d.date||'').localeCompare(b.d.date||''))}
+function results(){const r=search(),A=r.flatMap(x=>x.hit);
+ return `<section class="card"><b>Recherche « ${E(qs.trim())} » · ${sc=='all'?'toutes les années':sc}</b><div class="big">${eur(tot(A))}</div><div class="mu">${A.length} article(s) · ${r.length} journée(s)</div>
+ <div class="grid">${Object.entries(DEST).map(([k,v])=>[v,tot(A,a=>a.dest==k)]).filter(x=>x[1]).map(x=>`<span>${x[0]}</span><b>${eur(x[1])}</b>`).join('')}</div></section>
+ ${r.map(({d,hit})=>`<section class="card"><div class="hd" data-a="goto" data-d="${d.id}"><div><b>${lab(d)} · ${E(d.nom||d.type||'Sans titre')}</b><div class="mu">${E(d.adresse)}</div></div><div class="r"><b>${eur(tot(hit))}</b></div></div>${hit.map(x=>`<div class="hit"><span>${E(x.nom)||'—'} <i>${DEST[x.dest]||''}</i></span><b>${eur(x.prix)}</b></div>`).join('')}</section>`).join('')||'<p class="mu">Aucun résultat.</p>'}`}
 function render(){
- if(!ready)return;
+ if(!ready)return;syncYears();if(qs.trim()){$('#app').innerHTML=results();return}
  const L=days.filter(d=>(d.date||'').startsWith(ym)).sort((a,b)=>(a.date||'')<(b.date||'')?-1:1),A=L.flatMap(d=>d.articles||[]),[y,m]=ym.split('-');
  const rv=A.filter(a=>a.dest=='revente'),rp=rv.filter(a=>+a.revente>0),sr=rp.reduce((s,a)=>s+(+a.revente||0),0);
  $('#app').innerHTML=`<div class="nav"><button data-a="prev">‹</button><h1>${MOIS[m-1]} ${y}</h1><button data-a="next">›</button></div>
@@ -85,6 +100,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t
  if(a=='prev'||a=='next'){const[y,m]=ym.split('-');ym=ymOf(new Date(y,m-1+(a=='next'?1:-1),1))}
  else if(a=='addday'){const n=new Date(),td=ymOf(n)+'-'+pad(n.getDate()),nd={id:crypto.randomUUID(),date:td.startsWith(ym)?td:ym+'-01',type:TYPES[0],nom:'',adresse:'',photos:[],articles:[]};days.push(nd);open=nd.id;save(nd)}
  else if(!d)return;
+ else if(a=='goto'){ym=(d.date||ym).slice(0,7);open=d.id;qs='';$('#qin').value='';scrollTo(0,0)}
  else if(a=='tog')open=open==d.id?null:d.id;
  else if(a=='addart'){const k=Math.max(0,...(d.articles||[]).map(x=>+String(x.ref).split('-')[1]||0))+1;(d.articles=d.articles||[]).push({ref:(d.date||'').replace(/-/g,'')+'-'+pad(k),nom:'',prix:0,dest:'revente',revente:0});save(d)}
  else if(a=='delart'){d.articles.splice(i,1);save(d)}
@@ -92,6 +108,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(!t
  else if(a=='delday'){if(conf==d.id){idb('delete',d.id);days=days.filter(x=>x.id!=d.id);open=null;conf=null}else conf=d.id}
  render()});
 
+$('#qin').addEventListener('input',e=>{qs=e.target.value;render()});
+$('#sc').addEventListener('change',e=>{sc=e.target.value;render()});
 const q=indexedDB.open('carnet-achats',1);
 q.onupgradeneeded=()=>q.result.createObjectStore('jours',{keyPath:'id'});
 q.onsuccess=()=>{DB=q.result;navigator.storage?.persist?.();const r=DB.transaction('jours').objectStore('jours').getAll();r.onsuccess=()=>{days=r.result;ready=true;render()}};
